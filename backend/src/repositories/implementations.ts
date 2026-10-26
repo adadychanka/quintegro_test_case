@@ -88,16 +88,16 @@ export class InMemoryProductRepository implements IProductRepository {
   }
 }
 
-export class InMemoryOrderRepository implements IOrderRepository {
-  private orders: OrderRecord[] = [
+function seedOrders(): OrderRecord[] {
+  return [
     {
       orderId: "order-1",
       userId: "user-1",
       status: "finished",
       createAt: Date.now() - 86400000, // 1 day ago
       products: [
-        { id: "product-1", amount: 1, price: 1299.99 },
-        { id: "product-3", amount: 2, price: 199.99 }
+        { id: "product-1", amount: 1, priceCents: 129999 },
+        { id: "product-3", amount: 2, priceCents: 19999 }
       ]
     },
     {
@@ -106,35 +106,18 @@ export class InMemoryOrderRepository implements IOrderRepository {
       status: "created",
       createAt: Date.now(),
       products: [
-        { id: "product-2", amount: 1, price: 899.99 },
-        { id: "product-4", amount: 1, price: 599.99 }
+        { id: "product-2", amount: 1, priceCents: 89999 },
+        { id: "product-4", amount: 1, priceCents: 59999 }
       ]
     }
   ];
+}
+
+export class InMemoryOrderRepository implements IOrderRepository {
+  private orders: OrderRecord[] = seedOrders();
 
   reset(): void {
-    this.orders = [
-      {
-        orderId: "order-1",
-        userId: "user-1",
-        status: "finished",
-        createAt: Date.now() - 86400000,
-        products: [
-          { id: "product-1", amount: 1, price: 1299.99 },
-          { id: "product-3", amount: 2, price: 199.99 }
-        ]
-      },
-      {
-        orderId: "order-2",
-        userId: "user-1",
-        status: "created",
-        createAt: Date.now(),
-        products: [
-          { id: "product-2", amount: 1, price: 899.99 },
-          { id: "product-4", amount: 1, price: 599.99 }
-        ]
-      }
-    ];
+    this.orders = seedOrders();
   }
 
   findById(orderId: string): OrderRecord | undefined {
@@ -145,8 +128,25 @@ export class InMemoryOrderRepository implements IOrderRepository {
     return this.orders.filter(order => order.userId === userId);
   }
 
+  findCartByUserId(userId: string): OrderRecord | undefined {
+    return this.orders.find(order => order.userId === userId && order.status === 'created');
+  }
+
   findAll(): OrderRecord[] {
     return [...this.orders];
+  }
+
+  create(order: OrderRecord): void {
+    this.orders.push(order);
+  }
+
+  // Next id in the existing `order-N` format.
+  nextOrderId(): string {
+    const max = this.orders.reduce((acc, o) => {
+      const n = Number(/^order-(\d+)$/.exec(o.orderId)?.[1] ?? 0);
+      return Math.max(acc, n);
+    }, 0);
+    return `order-${max + 1}`;
   }
 
   update(order: OrderRecord): void {

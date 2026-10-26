@@ -28,22 +28,30 @@ export interface ProductRecord {
 export interface OrderRecord {
   orderId: string;
   userId: string;
-  status: 'created' | 'submited' | 'finished';
+  status: OrderStatus;
   createAt: number;
-  products: Array<{
-    id: string;
-    amount: number;
-    price: number;
-  }>;
+  products: OrderLine[];
   promo?: PromoEntity;
 }
 
+export interface OrderLine {
+  id: string;
+  amount: number;
+  priceCents: number;
+}
+
+export type OrderStatus = 'created' | 'submited' | 'finished';
+
 export interface OrderDTO {
   orderId: string;
-  status: 'created' | 'submited' | 'finished';
+  status: OrderStatus;
+  createAt: number;
+  itemCount: number;
+  subtotalCents: number;
   products: Array<{
     product: ProductRecord;
     amount: number;
+    // Dollars, kept for API compatibility (spec Q4).
     price: number;
   }>;
   promo?: PromoEntity;

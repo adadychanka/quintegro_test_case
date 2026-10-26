@@ -15,6 +15,9 @@ export interface IOrderRepository {
   findById(orderId: string): OrderRecord | undefined;
   findByUserId(userId: string): OrderRecord[];
   findAll(): OrderRecord[];
+  findCartByUserId(userId: string): OrderRecord | undefined;
+  create(order: OrderRecord): void;
+  nextOrderId(): string;
   update(order: OrderRecord): void;
 }
 

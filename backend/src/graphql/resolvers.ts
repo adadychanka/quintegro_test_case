@@ -21,9 +21,14 @@ export const createResolvers = (container: Container) => {
         return order;
       }),
 
-      orderSum: resolver(async ({ products, promo }: { orderId: string; products: any[]; promo?: string }, ctx) => {
-        requireUser(ctx);
-        return orderService.calculateOrderSum(products, promo);
+      cart: resolver(async (_args: {}, ctx) => {
+        const userId = requireUser(ctx);
+        return orderService.getOrCreateCart(userId);
+      }),
+
+      orderSum: resolver(async ({ orderId, promo }: { orderId: string; promo?: string }, ctx) => {
+        const userId = requireUser(ctx);
+        return orderService.calculateOrderSum(orderId, userId, promo);
       }),
 
       promo: resolver(async ({ promoId }: { promoId: string }) => {
@@ -47,23 +52,22 @@ export const createResolvers = (container: Container) => {
         return { token };
       }),
 
-      submitOrder: resolver(async ({ orderId }: { orderId: string }, ctx) => {
-        const userId = requireUser(ctx);
-        const success = await orderService.submitOrder(orderId, userId);
-        if (!success) {
-          throw new AppError('ORDER_NOT_FOUND', 'Order not found or access denied');
-        }
-        return success;
+      submitOrder: resolver(async (_args: { orderId: string }, ctx) => {
+        requireUser(ctx);
+        throw new AppError('USE_CHECKOUT', 'Use checkout to place an order.');
       }),
 
       deleteProductFromOrder: resolver(async ({ orderId, productId }: { orderId: string; productId: string }, ctx) => {
         const userId = requireUser(ctx);
-        const updatedOrder = await orderService.deleteProductFromOrder(orderId, productId, userId);
-        if (!updatedOrder) {
-          throw new AppError('ORDER_NOT_FOUND', 'Order not found or access denied');
-        }
-        return updatedOrder;
+        return orderService.deleteProductFromOrder(orderId, productId, userId);
       }),
+
+      updateItemAmount: resolver(
+        async ({ orderId, productId, amount }: { orderId: string; productId: string; amount: number }, ctx) => {
+          const userId = requireUser(ctx);
+          return orderService.updateItemAmount(orderId, productId, amount, userId);
+        }
+      ),
     },
   };
 };

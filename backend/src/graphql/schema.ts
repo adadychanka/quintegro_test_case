@@ -23,6 +23,10 @@ export const typeDefs = gql`
   type Order {
     orderId: ID!
     status: OrderStatus!
+    createAt: Float!
+    "Sum of item amounts."
+    itemCount: Int!
+    subtotalCents: Int!
     products: [OrderItem!]!
     promo: Promo
   }
@@ -51,13 +55,16 @@ export const typeDefs = gql`
   type Query {
     orders: [Order!]!
     order(orderId: ID!): Order
-    orderSum(orderId: ID!, products: [ProductInput!]!, promo: String): Float!
+    "The user's cart (order in status created). Created empty on first access."
+    cart: Order!
+    orderSum(orderId: ID!, products: [ProductInput!], promo: String): Float! @deprecated(reason: "Use checkoutQuote. Client prices are ignored.")
     promo(promoId: ID!): Promo
   }
 
   type Mutation {
     login(input: LoginInput!): LoginResponse!
-    submitOrder(orderId: ID!): Boolean!
-    deleteProductFromOrder(orderId: ID!, productId: ID!): Order
+    submitOrder(orderId: ID!): Boolean! @deprecated(reason: "Use checkout. Always returns USE_CHECKOUT.")
+    deleteProductFromOrder(orderId: ID!, productId: ID!): Order!
+    updateItemAmount(orderId: ID!, productId: ID!, amount: Int!): Order!
   }
 `;
