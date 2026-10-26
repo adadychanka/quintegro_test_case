@@ -24,16 +24,18 @@ const OrderSummary: React.FC<OrderSummaryProps> = ({ items, pricing, state, onRe
 
   return (
     <div className="space-y-4">
-      <ul className="space-y-3">
-        {items.map((item) => (
-          <li key={item.product.id} className="flex items-center justify-between gap-4 text-sm">
-            <span className="text-gray-900">
-              {item.product.title} <span className="text-gray-600">× {item.amount}</span>
-            </span>
-            <span className="font-medium text-gray-900">{formatUsd(Math.round(item.price * 100) * item.amount)}</span>
-          </li>
-        ))}
-      </ul>
+      {items.length > 0 && (
+        <ul className="space-y-3">
+          {items.map((item) => (
+            <li key={item.product.id} className="flex items-center justify-between gap-4 text-sm">
+              <span className="text-gray-900">
+                {item.product.title} <span className="text-gray-600">× {item.amount}</span>
+              </span>
+              <span className="font-medium text-gray-900">{formatUsd(Math.round(item.price * 100) * item.amount)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {state === 'error' ? (
         <Alert

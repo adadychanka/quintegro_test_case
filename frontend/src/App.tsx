@@ -5,6 +5,7 @@ import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
 import OrderPage from './pages/OrderPage'
 import CheckoutPage from './pages/CheckoutPage'
+import CheckoutConfirmationPage from './pages/CheckoutConfirmationPage'
 import RequireAuth from './components/RequireAuth'
 
 const App: React.FC = () => {
@@ -18,6 +19,11 @@ const App: React.FC = () => {
           <Route exact path="/checkout">
             <RequireAuth>
               <CheckoutPage />
+            </RequireAuth>
+          </Route>
+          <Route path="/checkout/confirmation/:orderId">
+            <RequireAuth>
+              <CheckoutConfirmationPage />
             </RequireAuth>
           </Route>
           <Route path='/hui' component={() => <h1>HUI 888123</h1>}/>
