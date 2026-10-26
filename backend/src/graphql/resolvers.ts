@@ -1,9 +1,11 @@
 import { Container } from '../container';
 import { AppError } from '../domain/errors';
 import { requireUser, resolver } from './errors';
+import { AddressInput, validateAddressInput } from '../domain/address';
 
 export const createResolvers = (container: Container) => {
-  const { orders: orderService, auth: authService, promos: promoService } = container.services;
+  const { orders: orderService, auth: authService, promos: promoService, pricing, address } = container.services;
+  const { orders: orderRepository } = container.repositories;
 
   return {
     Query: {
@@ -24,6 +26,29 @@ export const createResolvers = (container: Container) => {
       cart: resolver(async (_args: {}, ctx) => {
         const userId = requireUser(ctx);
         return orderService.getOrCreateCart(userId);
+      }),
+
+      checkoutQuote: resolver(
+        async ({ promoCode, shippingAddress }: { promoCode?: string; shippingAddress?: AddressInput }, ctx) => {
+          const userId = requireUser(ctx);
+          const cartId = orderService.getOrCreateCart(userId).orderId;
+          const parsed = shippingAddress ? validateAddressInput(shippingAddress) : undefined;
+          // An incomplete address is a normal state while typing: price without tax.
+          return pricing.quote(orderRepository.findById(cartId)!, {
+            promoCode: promoCode ?? undefined,
+            address: parsed?.ok ? parsed.address : undefined,
+          });
+        }
+      ),
+
+      addressSuggestions: resolver(async ({ query }: { query: string }, ctx) => {
+        const userId = requireUser(ctx);
+        return address.suggest(userId, query);
+      }),
+
+      validateAddress: resolver(async ({ address: input }: { address: AddressInput }, ctx) => {
+        requireUser(ctx);
+        return address.check(address.parse(input));
       }),
 
       orderSum: resolver(async ({ orderId, promo }: { orderId: string; promo?: string }, ctx) => {

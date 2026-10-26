@@ -43,6 +43,64 @@ export const typeDefs = gql`
     price: Float!
   }
 
+  type Address {
+    fullName: String!
+    phone: String
+    line1: String!
+    line2: String
+    city: String!
+    state: String!
+    zip: String!
+    country: String!
+  }
+
+  input AddressInput {
+    fullName: String!
+    phone: String
+    line1: String!
+    line2: String
+    city: String!
+    state: String!
+    zip: String!
+  }
+
+  enum TaxStatus {
+    calculated
+    estimated
+    pending
+  }
+
+  "All amounts in integer cents, USD."
+  type Pricing {
+    subtotalCents: Int!
+    discountCents: Int!
+    taxCents: Int!
+    shippingCents: Int!
+    totalCents: Int!
+    currency: String!
+    promoCode: String
+    promoPercent: Int
+    taxStatus: TaxStatus!
+  }
+
+  type AddressSuggestion {
+    id: ID!
+    label: String!
+    address: Address!
+  }
+
+  enum AddressVerdict {
+    verified
+    corrected
+    undeliverable
+    unavailable
+  }
+
+  type AddressValidation {
+    verdict: AddressVerdict!
+    suggested: Address
+  }
+
   input LoginInput {
     login: String!
     password: String!
@@ -59,6 +117,10 @@ export const typeDefs = gql`
     cart: Order!
     orderSum(orderId: ID!, products: [ProductInput!], promo: String): Float! @deprecated(reason: "Use checkoutQuote. Client prices are ignored.")
     promo(promoId: ID!): Promo
+    "Stateless price preview for the caller's cart. Stores nothing."
+    checkoutQuote(promoCode: String, shippingAddress: AddressInput): Pricing!
+    addressSuggestions(query: String!): [AddressSuggestion!]!
+    validateAddress(address: AddressInput!): AddressValidation!
   }
 
   type Mutation {
