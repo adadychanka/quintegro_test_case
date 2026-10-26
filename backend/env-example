@@ -1,3 +1,8 @@
 PORT=3000
 NODE_ENV=production
 JWT_SECRET=change-this-secret-in-production
+ADDRESS_PROVIDER=mock
+TAX_PROVIDER=mock
+PAYMENT_PROVIDER=mock
+# off disables the artificial 1.5 s delay and the injected 500 on every 5th request
+FAULT_INJECTION=on

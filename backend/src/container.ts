@@ -8,6 +8,7 @@ import {
   InMemoryPromoRepository,
   InMemoryUserRepository,
 } from './repositories/implementations';
+import { createProviders } from './providers';
 
 export type Env = Record<string, string | undefined>;
 
@@ -31,11 +32,13 @@ export function createContainer(env: Env = process.env) {
     promos: new PromoService(repositories.promos),
   };
 
+  const providers = createProviders(env);
+
   const config: ContainerConfig = {
     faultInjection: (env.FAULT_INJECTION ?? 'on') !== 'off',
   };
 
-  return { repositories, services, config };
+  return { repositories, services, providers, config };
 }
 
 export type Container = ReturnType<typeof createContainer>;
