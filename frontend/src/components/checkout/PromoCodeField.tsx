@@ -6,11 +6,13 @@ import { Badge } from '@/components/ui/badge'
 import { messageFor } from './errorMessages'
 import { fieldA11y } from './FormField'
 
+export type PromoError = 'PROMO_INVALID' | 'PROMO_EXPIRED' | 'PROMO_FAILED'
+
 interface PromoCodeFieldProps {
   applied?: { code: string; percent: number }
   onApply: (code: string) => Promise<void>
   onRemove: () => void
-  error?: 'PROMO_INVALID' | 'PROMO_EXPIRED'
+  error?: PromoError
   disabled?: boolean
 }
 

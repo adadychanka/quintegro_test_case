@@ -2,15 +2,16 @@ import React from 'react'
 import { render } from '@testing-library/react'
 import { MockedProvider, MockedResponse } from '@apollo/client/testing'
 import { MemoryRouter, Route } from 'react-router-dom'
-import { createCache } from '@/apollo/client'
+import { DEFAULT_OPTIONS, createCache } from '@/apollo/client'
 
 export function renderWithProviders(
   ui: React.ReactElement,
   { mocks = [], route = '/', path }: { mocks?: MockedResponse[]; route?: string; path?: string } = {}
 ) {
   const location: { current?: { pathname: string; search: string } } = {}
+  // Same default options as the real client, so error handling matches production.
   const result = render(
-    <MockedProvider mocks={mocks} cache={createCache()}>
+    <MockedProvider mocks={mocks} cache={createCache()} defaultOptions={DEFAULT_OPTIONS}>
       <MemoryRouter initialEntries={[route]}>
         {path ? <Route path={path}>{ui}</Route> : ui}
         <Route

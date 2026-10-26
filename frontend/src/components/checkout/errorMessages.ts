@@ -4,6 +4,7 @@ const MESSAGES: Record<string, string> = {
   PAYMENT_ERROR: 'Payment could not be processed. Try again.',
   PROMO_INVALID: "This promo code doesn't exist.",
   PROMO_EXPIRED: 'This promo code has expired.',
+  PROMO_FAILED: "Couldn't apply the promo code. Try again.",
   NETWORK: "We couldn't reach the server. Try again — you won't be charged twice.",
   CART_EMPTY: 'Your cart has changed. Return to your orders to review it.',
   ORDER_NOT_EDITABLE: 'Your cart has changed. Return to your orders to review it.',

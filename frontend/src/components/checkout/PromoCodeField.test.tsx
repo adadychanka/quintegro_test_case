@@ -30,6 +30,8 @@ describe('PromoCodeField', () => {
     expect(screen.getByText("This promo code doesn't exist.")).toBeInTheDocument()
     rerender(<PromoCodeField error="PROMO_EXPIRED" onApply={async () => {}} onRemove={() => {}} />)
     expect(screen.getByText('This promo code has expired.')).toBeInTheDocument()
+    rerender(<PromoCodeField error="PROMO_FAILED" onApply={async () => {}} onRemove={() => {}} />)
+    expect(screen.getByText("Couldn't apply the promo code. Try again.")).toBeInTheDocument()
   })
 
   it('does not apply an empty code', async () => {

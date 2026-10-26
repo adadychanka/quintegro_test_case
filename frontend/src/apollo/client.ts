@@ -1,4 +1,4 @@
-import { ApolloClient, InMemoryCache, Operation, createHttpLink, from } from '@apollo/client';
+import { ApolloClient, DefaultOptions, InMemoryCache, Operation, createHttpLink, from } from '@apollo/client';
 import { setContext } from '@apollo/client/link/context';
 import { onError } from '@apollo/client/link/error';
 import { RetryLink } from '@apollo/client/link/retry';
@@ -63,15 +63,17 @@ export function createCache() {
   });
 }
 
+export const DEFAULT_OPTIONS: DefaultOptions = {
+  watchQuery: {
+    errorPolicy: 'all',
+  },
+  query: {
+    errorPolicy: 'all',
+  },
+};
+
 export const client = new ApolloClient({
   link: from([errorLink, authLink, retryLink, httpLink]),
   cache: createCache(),
-  defaultOptions: {
-    watchQuery: {
-      errorPolicy: 'all',
-    },
-    query: {
-      errorPolicy: 'all',
-    },
-  },
+  defaultOptions: DEFAULT_OPTIONS,
 });

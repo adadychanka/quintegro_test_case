@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert } from '@/components/ui/alert'
 import AddressFields from '@/components/checkout/AddressFields'
 import PaymentSection from '@/components/checkout/PaymentSection'
-import PromoCodeField from '@/components/checkout/PromoCodeField'
+import PromoCodeField, { PromoError } from '@/components/checkout/PromoCodeField'
 import OrderSummary from '@/components/checkout/OrderSummary'
 import AddressVerificationPanel from '@/components/checkout/AddressVerificationPanel'
 import { messageFor } from '@/components/checkout/errorMessages'
@@ -66,7 +66,7 @@ const CheckoutPage: React.FC = () => {
   const [promo, setPromo] = useState<{ code: string; percent: number } | undefined>(
     draft?.promoCode ? { code: draft.promoCode, percent: 0 } : undefined
   )
-  const [promoError, setPromoError] = useState<'PROMO_INVALID' | 'PROMO_EXPIRED' | undefined>()
+  const [promoError, setPromoError] = useState<PromoError | undefined>()
 
   const [attempted, setAttempted] = useState(false)
   const [serverErrors, setServerErrors] = useState<ServerErrors>(NO_SERVER_ERRORS)
@@ -263,10 +263,12 @@ const CheckoutPage: React.FC = () => {
         let verdict: AddressVerdict = 'unavailable'
         let suggested: Address | null = null
         try {
+          // errorPolicy 'none': errors must throw (the client default is 'all').
           const res = await client.query({
             query: VALIDATE_ADDRESS,
             variables: { address: toAddressInput(shipping) },
             fetchPolicy: 'network-only',
+            errorPolicy: 'none',
           })
           verdict = res.data.validateAddress.verdict
           suggested = res.data.validateAddress.suggested
@@ -309,6 +311,11 @@ const CheckoutPage: React.FC = () => {
   const retryPlace = async () => {
     setPageError(null)
     if (busyRef.current) return
+    // Never place an order the form would not let through.
+    if (collectErrors().length > 0) {
+      void handleSubmit()
+      return
+    }
     busyRef.current = true
     try {
       await place(lastChoiceRef.current)
@@ -320,16 +327,20 @@ const CheckoutPage: React.FC = () => {
   const applyPromo = async (code: string) => {
     setPromoError(undefined)
     try {
+      // errorPolicy 'none': errors must throw (the client default is 'all').
       const res = await client.query<{ checkoutQuote: Pricing }>({
         query: CHECKOUT_QUOTE,
         variables: { promoCode: code },
         fetchPolicy: 'network-only',
+        errorPolicy: 'none',
       })
       setPromo({ code: res.data.checkoutQuote.promoCode ?? code, percent: res.data.checkoutQuote.promoPercent ?? 0 })
     } catch (e) {
       const c = errorCode(e)
       if (c === 'PROMO_INVALID' || c === 'PROMO_EXPIRED') setPromoError(c)
-      else setPageError('NETWORK')
+      else if (c === 'UNAUTHENTICATED') goToLogin()
+      // Promo failures stay in the promo field: the page-level alert retries placing the order.
+      else setPromoError('PROMO_FAILED')
     }
   }
 

@@ -134,6 +134,16 @@ describe('CheckoutPage: summary', () => {
     await userEvent.type(screen.getByLabelText('Promo code'), 'nope')
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
     expect(await screen.findByText("This promo code doesn't exist.")).toBeInTheDocument()
+    expect(screen.queryByText(/We couldn't reach the server/)).toBeNull()
+  })
+
+  it('promo apply failure stays in the promo field and never offers to place the order', async () => {
+    setup({ quoteResult: (vars) => (vars.promoCode ? { errors: [gqlError('INTERNAL')] } : { data: { checkoutQuote: quote(vars) } }) })
+    await screen.findByRole('heading', { name: 'Checkout' })
+    await userEvent.type(screen.getByLabelText('Promo code'), 'save10')
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    expect(await screen.findByText("Couldn't apply the promo code. Try again.")).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
   })
 
   it('M2: applied promo updates the total', async () => {
@@ -244,6 +254,18 @@ describe('CheckoutPage: submit flow', () => {
     await user.click(within(alert.closest('[role=alert]') as HTMLElement).getByRole('button', { name: 'Try again' }))
     await waitFor(() => expect(inputs).toHaveLength(2))
     expect(inputs[1].idempotencyKey).toBe(inputs[0].idempotencyKey)
+  })
+
+  it('Try again after PAYMENT_ERROR re-validates the form first', async () => {
+    const { inputs } = setup({ checkout: () => ({ errors: [gqlError('PAYMENT_ERROR')] }) })
+    const user = await fillForm()
+    await readyToPlace()
+    await user.click(placeButton())
+    const alert = (await screen.findByText('Payment could not be processed. Try again.')).closest('[role=alert]') as HTMLElement
+    await user.clear(screen.getByLabelText('Security code'))
+    await user.click(within(alert).getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByRole('alert', { name: 'Please fix the highlighted fields.' })).toBeInTheDocument()
+    expect(inputs).toHaveLength(1)
   })
 
   it('Q5: PRICE_CHANGED shows the new total and uses a new key next time', async () => {
