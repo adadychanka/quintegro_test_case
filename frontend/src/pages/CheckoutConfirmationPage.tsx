@@ -1,6 +1,6 @@
 import React from 'react'
 import { useQuery } from '@apollo/client'
-import { Redirect, useHistory, useParams } from 'react-router-dom'
+import { Redirect, useHistory, useLocation, useParams } from 'react-router-dom'
 import { CheckCircle2, Loader2, PackageX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -20,6 +20,7 @@ const primaryButton = 'h-11 bg-blue-600 hover:bg-blue-700 text-white font-medium
 const CheckoutConfirmationPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>()
   const history = useHistory()
+  const location = useLocation()
   const { data, loading, error, refetch } = useQuery<{ order: Order }>(GET_ORDER, {
     variables: { orderId },
     errorPolicy: 'none',
@@ -36,6 +37,12 @@ const CheckoutConfirmationPage: React.FC = () => {
         </div>
       </div>
     )
+  }
+
+  // R1: an expired token sends the user to login and back to this page.
+  if (!order && errorCode(error) === 'UNAUTHENTICATED') {
+    localStorage.removeItem('auth_token')
+    return <Redirect to={`/login?redirect=${encodeURIComponent(location.pathname)}`} />
   }
 
   const backToOrders = (

@@ -34,6 +34,13 @@ describe('CheckoutConfirmationPage', () => {
     expect(location.current?.pathname).toBe('/order')
   })
 
+  it('R1: expired token goes to login and back here', async () => {
+    const { location } = setup({ result: { errors: [gqlError('UNAUTHENTICATED')] } })
+    await waitFor(() => expect(location.current?.pathname).toBe('/login'))
+    expect(location.current?.search).toBe('?redirect=%2Fcheckout%2Fconfirmation%2Forder-2')
+    expect(localStorage.getItem('auth_token')).toBeNull()
+  })
+
   it('K4: a cart order redirects to checkout', async () => {
     const { location } = setup({ result: { data: { order: order() } } })
     await waitFor(() => expect(location.current?.pathname).toBe('/checkout'))
