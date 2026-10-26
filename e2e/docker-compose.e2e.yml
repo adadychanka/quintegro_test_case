@@ -1,0 +1,9 @@
+# Overrides for e2e runs: makes the frontend talk to GraphQL through nginx
+# regardless of the local frontend/.env. Fault injection stays on: flows must pass with it.
+services:
+  frontend:
+    environment:
+      VITE_GRAPHQL_URI: /runtime/graphql
+  backend:
+    environment:
+      FAULT_INJECTION: "on"
