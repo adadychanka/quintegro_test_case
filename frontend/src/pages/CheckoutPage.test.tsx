@@ -351,6 +351,12 @@ describe('CheckoutPage: submit flow', () => {
     expect(loadDraft()?.shipping.fullName).toBe('John Doe')
   })
 
+  it('R1: expired token on the quote goes to login', async () => {
+    const { location } = setup({ quoteResult: () => ({ errors: [gqlError('UNAUTHENTICATED')] }) })
+    await waitFor(() => expect(location.current?.pathname).toBe('/login'))
+    expect(location.current?.search).toBe('?redirect=%2Fcheckout')
+  })
+
   it('restores draft after re-login', async () => {
     saveDraft({ shipping: { ...emptyAddress(), fullName: 'Jane Roe', zip: '94105' }, billingSameAsShipping: false, billing: emptyAddress(), promoCode: '' })
     setup()

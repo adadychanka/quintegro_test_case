@@ -109,10 +109,11 @@ const CheckoutPage: React.FC = () => {
     history.push(`/login?redirect=${encodeURIComponent('/checkout')}`)
   }
 
+  // R1: an expired token on any checkout request sends the user to login (the draft is saved).
   useEffect(() => {
-    if (errorCode(cartError) === 'UNAUTHENTICATED') goToLogin()
+    if (errorCode(cartError) === 'UNAUTHENTICATED' || quote.errorCode === 'UNAUTHENTICATED') goToLogin()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cartError])
+  }, [cartError, quote.errorCode])
 
   if (cartLoading && !cart) {
     return (
