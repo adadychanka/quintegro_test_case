@@ -70,7 +70,16 @@ export function usePlaceOrder() {
       // In-flight guard: a second click returns the same pending promise (S4).
       if (pendingRef.current) return pendingRef.current
 
-      const run = async () => {
+      const run = async (): Promise<PlaceOrderResult> => {
+        try {
+          return await submit()
+        } catch {
+          // Anything unexpected (e.g. a browser API missing) must still reach the UI as an error.
+          return { ok: false, code: 'INTERNAL' }
+        }
+      }
+
+      const submit = async () => {
         setStatus('submitting')
         const key = keyFor(input)
         let result = await attempt(input, key)

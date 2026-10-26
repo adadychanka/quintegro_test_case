@@ -1,5 +1,6 @@
 import React from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import * as idempotency from '@/lib/idempotency'
 import { act, renderHook } from '@testing-library/react'
 import { MockedProvider } from '@apollo/client/testing'
 import { usePlaceOrder, PlaceOrderInput } from './usePlaceOrder'
@@ -87,5 +88,16 @@ describe('usePlaceOrder', () => {
     const { result } = renderHook(() => usePlaceOrder(), { wrapper })
     const r = await act(() => result.current.placeOrder(input))
     expect(r).toEqual({ ok: false, code: 'NETWORK', details: {} })
+  })
+
+  it('turns an unexpected exception into an error result', async () => {
+    const spy = vi.spyOn(idempotency, 'newIdempotencyKey').mockImplementation(() => {
+      throw new TypeError('crypto.randomUUID is not a function')
+    })
+    const { result } = setup([ok])
+    const r = await act(() => result.current.placeOrder(input))
+    expect(r).toEqual({ ok: false, code: 'INTERNAL' })
+    expect(result.current.status).toBe('idle')
+    spy.mockRestore()
   })
 })
