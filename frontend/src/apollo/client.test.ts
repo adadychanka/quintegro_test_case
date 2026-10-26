@@ -9,6 +9,12 @@ describe('retryIf', () => {
     expect(retryIf(new TypeError('Failed to fetch'), op('Cart'))).toBe(true)
   })
 
+  it('retries read queries used by checkout', () => {
+    for (const name of ['ValidateAddress', 'GetPromo']) {
+      expect(retryIf({ statusCode: 500 }, op(name))).toBe(true)
+    }
+  })
+
   it('does not retry other mutations or 4xx', () => {
     expect(retryIf({ statusCode: 500 }, op('UpdateItemAmount'))).toBe(false)
     expect(retryIf({ statusCode: 400 }, op('Checkout'))).toBe(false)

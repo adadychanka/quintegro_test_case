@@ -26,8 +26,8 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
   if (networkError) console.log(`[Network error]: ${networkError}`);
 });
 
-// Safe to repeat: reads and the idempotent checkout (spec D3). Never other mutations.
-export const RETRYABLE_OPERATIONS = new Set(['Checkout', 'CheckoutQuote', 'Cart', 'GetOrders', 'GetOrder']);
+// Safe to repeat: read queries and the idempotent checkout (spec D3, §9a). Never other mutations.
+export const RETRYABLE_OPERATIONS = new Set(['Checkout', 'CheckoutQuote', 'Cart', 'GetOrders', 'GetOrder', 'ValidateAddress', 'GetPromo']);
 
 type RetryListener = (operationName: string) => void;
 const retryListeners = new Set<RetryListener>();
