@@ -1,100 +1,28 @@
-import React, { useState } from 'react'
-import { useQuery, useMutation } from '@apollo/client'
+import React from 'react'
+import { useQuery } from '@apollo/client'
+import { Link, useHistory } from 'react-router-dom'
+import { Loader2, ShoppingCart } from 'lucide-react'
 import { GET_ORDERS } from '../graphql/queries'
-import { SUBMIT_ORDER, DELETE_PRODUCT_FROM_ORDER } from '../graphql/mutations'
 import OrderListItem from './OrderListItem'
-import OrderSum from './OrderSum'
-import { Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Alert } from '@/components/ui/alert'
+import { useCart } from '@/hooks/useCart'
+import { formatUsd } from '@/lib/money'
+import type { Order, OrderStatus } from '@/types/order'
 
-interface Product {
-  id: string
-  title: string
-  description: string
-  image: string
-}
-
-interface OrderItem {
-  product: Product
-  amount: number
-  price: number
-}
-
-interface Order {
-  orderId: string
-  status: 'created' | 'submited' | 'finished'
-  products: OrderItem[]
+const STATUS_LABEL: Record<OrderStatus, string> = {
+  created: 'In cart',
+  submited: 'Submitted',
+  finished: 'Finished',
 }
 
 const OrderList: React.FC = () => {
-  const [orders, setOrders] = useState<Order[]>([])
+  const history = useHistory()
+  const { cart, loading: cartLoading, error: cartError, refetch: refetchCart } = useCart()
+  const { data, loading: ordersLoading, error: ordersError, refetch: refetchOrders } = useQuery<{ orders: Order[] }>(GET_ORDERS)
 
-  const { loading, error, refetch } = useQuery(GET_ORDERS, {
-    onCompleted: (data) => {
-      setOrders(data.orders || [])
-    },
-    onError: (error) => {
-      console.error('GraphQL error:', error)
-    }
-  })
-
-  const [submitOrder] = useMutation(SUBMIT_ORDER, {
-    onCompleted: () => {
-      refetch()
-    },
-    onError: (error) => {
-      console.error('Failed to submit order:', error)
-    }
-  })
-
-  const [_deleteProduct] = useMutation(DELETE_PRODUCT_FROM_ORDER, {
-    onCompleted: (data) => {
-      // Update local state with the returned order
-      setOrders(prevOrders => 
-        prevOrders.map(order => 
-          order.orderId === data.deleteProductFromOrder.orderId 
-            ? data.deleteProductFromOrder 
-            : order
-        )
-      )
-    },
-    onError: (error) => {
-      console.error('Failed to delete product:', error)
-    }
-  })
-
-  const handleAmountChange = (productId: string, newAmount: number) => {
-    setOrders(prevOrders => 
-      prevOrders.map(order => ({
-        ...order,
-        products: order.products.map(item => 
-          item.product.id === productId 
-            ? { ...item, amount: newAmount }
-            : item
-        )
-      }))
-    )
-  }
-
-  const handleDelete = (productId: string) => {
-    setOrders(prevOrders => 
-      prevOrders.map(order => ({
-        ...order,
-        products: order.products.filter(item => item.product.id !== productId)
-      })).filter(order => order.products.length > 0)
-    )
-  }
-
-  const handleSubmitOrder = async (orderId: string) => {
-    try {
-      await submitOrder({
-        variables: { orderId }
-      })
-    } catch (error) {
-      console.error('Error submitting order:', error)
-    }
-  }
-
-  if (loading) {
+  if ((cartLoading && !cart) || (ordersLoading && !data)) {
     return (
       <div className="flex justify-center py-12">
         <div className="text-center">
@@ -105,72 +33,103 @@ const OrderList: React.FC = () => {
     )
   }
 
-  if (error) {
+  if ((cartError && !cart) || (ordersError && !data)) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-6">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-          </div>
-          <div className="ml-3">
-            <p className="text-sm font-medium">
-              {error.message}
-            </p>
-          </div>
-        </div>
-      </div>
+      <Alert
+        variant="error"
+        className="mb-6"
+        action={
+          <Button
+            variant="outline"
+            className="h-9 border-gray-300"
+            onClick={() => {
+              refetchCart()
+              void refetchOrders()
+            }}
+          >
+            Try again
+          </Button>
+        }
+      >
+        We couldn't load your orders.
+      </Alert>
     )
   }
 
-  if (orders.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <div className="bg-white rounded-lg border border-gray-200 p-8 shadow-sm">
-          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-          </svg>
-          <h2 className="mt-4 text-xl font-semibold text-gray-900">
-            No orders found
-          </h2>
-          <p className="mt-2 text-gray-600">
-            You don't have any orders yet.
-          </p>
-        </div>
-      </div>
-    )
-  }
+  const historyOrders = (data?.orders ?? []).filter((o) => o.status !== 'created')
+  const items = cart?.products ?? []
 
   return (
     <div>
       <h1 className="text-3xl font-bold mb-8 text-gray-900">
         Your Orders
       </h1>
-      
-      {orders.map((order) => (
-        <div key={order.orderId} className="mb-8 bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-          <h2 className="text-xl font-semibold mb-6 text-gray-900 border-b border-gray-200 pb-3">
-            Order #{order.orderId} - {order.status}
-          </h2>
-          
-          {order.products.map((item, index) => (
-            <OrderListItem
-              key={item.product.id}
-              product={item.product}
-              amount={item.amount}
-              price={item.price}
-              orderId={order.orderId}
-              onAmountChange={handleAmountChange}
-              onDelete={handleDelete}
-              onSubmitOrder={handleSubmitOrder}
-              status={order.status}
-              isLast={index === order.products.length -1}
-            />
-          ))}
-          <OrderSum orderId={order.orderId} products={order.products} />
+
+      <section aria-labelledby="cart-heading" className="mb-10 bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+        <h2 id="cart-heading" className="text-xl font-semibold mb-6 text-gray-900 border-b border-gray-200 pb-3">
+          Your cart
+        </h2>
+
+        {items.length === 0 ? (
+          <div className="text-center py-8">
+            <ShoppingCart className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true" />
+            <p className="mt-4 text-xl font-semibold text-gray-900">Your cart is empty</p>
+            <p className="mt-2 text-gray-600">Products you add will show up here.</p>
+          </div>
+        ) : (
+          items.map((item) => <OrderListItem key={item.product.id} item={item} orderId={cart!.orderId} />)
+        )}
+
+        <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-lg font-bold text-gray-900">
+            Subtotal: <span>{formatUsd(cart?.subtotalCents ?? 0)}</span>
+          </p>
+          <Button
+            onClick={() => history.push('/checkout')}
+            disabled={items.length === 0}
+            className="h-11 bg-blue-600 hover:bg-blue-700 text-white font-medium"
+          >
+            Proceed to checkout
+          </Button>
         </div>
-      ))}
+      </section>
+
+      <section aria-labelledby="history-heading">
+        <h2 id="history-heading" className="text-xl font-semibold mb-6 text-gray-900">
+          Order history
+        </h2>
+        {historyOrders.length === 0 ? (
+          <p className="text-gray-600">You haven't placed any orders yet.</p>
+        ) : (
+          historyOrders.map((order) => (
+            <article
+              key={order.orderId}
+              aria-labelledby={`order-${order.orderId}`}
+              className="mb-8 bg-white rounded-lg border border-gray-200 p-6 shadow-sm"
+            >
+              <div className="flex items-center justify-between mb-6 border-b border-gray-200 pb-3">
+                <h3 id={`order-${order.orderId}`} className="text-xl font-semibold text-gray-900">
+                  Order #{order.orderId}
+                </h3>
+                <Badge variant="secondary">{STATUS_LABEL[order.status]}</Badge>
+              </div>
+              {order.products.map((item) => (
+                <OrderListItem key={item.product.id} item={item} orderId={order.orderId} readOnly />
+              ))}
+              <div className="mt-6 flex items-center justify-between">
+                <p className="text-lg font-bold text-gray-900">
+                  Total: <span>{formatUsd(order.pricing?.totalCents ?? order.subtotalCents)}</span>
+                </p>
+                {order.pricing && (
+                  <Button asChild variant="outline" className="h-11 border-gray-300">
+                    <Link to={`/checkout/confirmation/${order.orderId}`}>View details</Link>
+                  </Button>
+                )}
+              </div>
+            </article>
+          ))
+        )}
+      </section>
     </div>
   )
 }

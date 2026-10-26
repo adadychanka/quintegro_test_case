@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
+import { clearDraft } from '@/lib/checkoutDraft'
 
 const UserProfile: React.FC = () => {
   const history = useHistory()
@@ -20,6 +21,8 @@ const UserProfile: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token')
+    // The checkout draft holds personal data (address, phone).
+    clearDraft()
     // Force page reload to update authentication state
     window.location.reload()
   }

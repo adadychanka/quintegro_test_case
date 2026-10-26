@@ -1,136 +1,104 @@
-import { OrderService } from '../services/orderService';
-import { AuthService } from '../services/authService';
-import { PromoService } from '../services/promoService';
+import { Container } from '../container';
+import { AppError } from '../domain/errors';
+import { requireUser, resolver } from './errors';
+import { AddressInput, validateAddressInput } from '../domain/address';
+import { CheckoutInput } from '../services/checkoutService';
 
-export const createResolvers = (orderService: OrderService, authService: AuthService, promoService: PromoService) => {
-  const extractUserIdFromToken = (context: any): string | null => {
-    const authHeader = context.req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return null;
-    }
-
-    const token = authHeader.substring(7);
-    const decoded = authService.verifyToken(token);
-    
-    if (!decoded || !decoded.userId) {
-      return null;
-    }
-
-    return decoded.userId;
-  };
+export const createResolvers = (container: Container) => {
+  const { orders: orderService, auth: authService, promos: promoService, pricing, address, checkout } = container.services;
+  const { orders: orderRepository } = container.repositories;
 
   return {
     Query: {
-      orders: async (parent: any, args: any, context: any) => {
-        const userId = extractUserIdFromToken(context);
-        if (!userId) {
-          throw new Error('Authentication required');
-        }
+      orders: resolver(async (_args: {}, ctx) => {
+        const userId = requireUser(ctx);
+        return orderService.getOrdersByUserId(userId);
+      }),
 
-        try {
-          return await orderService.getOrdersByUserId(userId);
-        } catch (error) {
-          throw new Error('Failed to fetch orders');
+      order: resolver(async ({ orderId }: { orderId: string }, ctx) => {
+        const userId = requireUser(ctx);
+        const order = await orderService.getOrderById(orderId, userId);
+        if (!order) {
+          throw new AppError('ORDER_NOT_FOUND', 'Order not found');
         }
-      },
+        return order;
+      }),
 
-      order: async (parent: any, { orderId }: { orderId: string }, context: any) => {
-        const userId = extractUserIdFromToken(context);
-        if (!userId) {
-          throw new Error('Authentication required');
+      cart: resolver(async (_args: {}, ctx) => {
+        const userId = requireUser(ctx);
+        return orderService.getOrCreateCart(userId);
+      }),
+
+      checkoutQuote: resolver(
+        async ({ promoCode, shippingAddress }: { promoCode?: string; shippingAddress?: AddressInput }, ctx) => {
+          const userId = requireUser(ctx);
+          const cartId = orderService.getOrCreateCart(userId).orderId;
+          const parsed = shippingAddress ? validateAddressInput(shippingAddress) : undefined;
+          // An incomplete address is a normal state while typing: price without tax.
+          return pricing.quote(orderRepository.findById(cartId)!, {
+            promoCode: promoCode ?? undefined,
+            address: parsed?.ok ? parsed.address : undefined,
+          });
         }
+      ),
 
-        try {
-          const order = await orderService.getOrderById(orderId, userId);
-          if (!order) {
-            throw new Error('Order not found or access denied');
+      addressSuggestions: resolver(async ({ query }: { query: string }, ctx) => {
+        const userId = requireUser(ctx);
+        return address.suggest(userId, query);
+      }),
+
+      validateAddress: resolver(async ({ address: input }: { address: AddressInput }, ctx) => {
+        requireUser(ctx);
+        return address.check(address.parse(input));
+      }),
+
+      orderSum: resolver(async ({ orderId, promo }: { orderId: string; promo?: string }, ctx) => {
+        const userId = requireUser(ctx);
+        return orderService.calculateOrderSum(orderId, userId, promo);
+      }),
+
+      promo: resolver(async ({ promoId }: { promoId: string }) => {
+        const validation = promoService.validatePromo(promoId);
+        if (!validation.isValid) {
+          if (validation.error === 'Promo expired') {
+            throw new AppError('PROMO_EXPIRED', 'This promo code has expired.');
           }
-          return order;
-        } catch (error) {
-          throw new Error('Failed to fetch order');
+          throw new AppError('PROMO_INVALID', "This promo code doesn't exist.");
         }
-      },
-
-      orderSum: async (parent: any, { orderId, products, promo }: { orderId: string, products: any[], promo?: string }, context: any) => {
-        const userId = extractUserIdFromToken(context);
-        if (!userId) {
-          throw new Error('Authentication required');
-        }
-
-        try {
-          return orderService.calculateOrderSum(products, promo);
-        } catch (error) {
-          throw new Error('Failed to calculate order sum');
-        }
-      },
-
-      promo: async (parent: any, { promoId }: { promoId: string }, context: any) => {
-        try {
-          const validation = promoService.validatePromo(promoId);
-          
-          if (!validation.isValid) {
-            if (validation.error === 'Promo not found') {
-              throw new Error('Promo not found');
-            } else if (validation.error === 'Promo expired') {
-              throw new Error('Promo expired');
-            }
-          }
-
-          return validation.promo;
-        } catch (error) {
-          throw new Error('Failed to fetch promo');
-        }
-      }
+        return validation.promo;
+      }),
     },
 
     Mutation: {
-      login: async (parent: any, { input }: { input: { login: string, password: string } }, context: any) => {
-        try {
-          const token = await authService.authenticateUser(input.login, input.password);
-          
-          if (!token) {
-            throw new Error('Invalid credentials');
-          }
-
-          return { token };
-        } catch (error) {
-          throw new Error('Login failed');
+      login: resolver(async ({ input }: { input: { login: string; password: string } }) => {
+        const token = await authService.authenticateUser(input.login, input.password);
+        if (!token) {
+          throw new AppError('UNAUTHENTICATED', 'Invalid credentials');
         }
-      },
+        return { token };
+      }),
 
-      submitOrder: async (parent: any, { orderId }: { orderId: string }, context: any) => {
-        const userId = extractUserIdFromToken(context);
-        if (!userId) {
-          throw new Error('Authentication required');
-        }
+      submitOrder: resolver(async (_args: { orderId: string }, ctx) => {
+        requireUser(ctx);
+        throw new AppError('USE_CHECKOUT', 'Use checkout to place an order.');
+      }),
 
-        try {
-          const success = await orderService.submitOrder(orderId, userId);
-          if (!success) {
-            throw new Error('Order not found or access denied');
-          }
-          return success;
-        } catch (error) {
-          throw new Error('Failed to submit order');
-        }
-      },
+      deleteProductFromOrder: resolver(async ({ orderId, productId }: { orderId: string; productId: string }, ctx) => {
+        const userId = requireUser(ctx);
+        return orderService.deleteProductFromOrder(orderId, productId, userId);
+      }),
 
-      deleteProductFromOrder: async (parent: any, { orderId, productId }: { orderId: string, productId: string }, context: any) => {
-        const userId = extractUserIdFromToken(context);
-        if (!userId) {
-          throw new Error('Authentication required');
-        }
+      checkout: resolver(async ({ input }: { input: CheckoutInput }, ctx) => {
+        const userId = requireUser(ctx);
+        return checkout.checkout(userId, input);
+      }),
 
-        try {
-          const updatedOrder = await orderService.deleteProductFromOrder(orderId, productId, userId);
-          if (!updatedOrder) {
-            throw new Error('Order not found or access denied');
-          }
-          return updatedOrder;
-        } catch (error) {
-          throw new Error('Failed to delete product from order');
+      updateItemAmount: resolver(
+        async ({ orderId, productId, amount }: { orderId: string; productId: string; amount: number }, ctx) => {
+          const userId = requireUser(ctx);
+          return orderService.updateItemAmount(orderId, productId, amount, userId);
         }
-      }
-    }
+      ),
+    },
   };
 };

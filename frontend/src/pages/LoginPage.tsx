@@ -1,21 +1,28 @@
 import React, { useState } from 'react'
-import { useHistory } from 'react-router-dom'
+import { useHistory, useLocation } from 'react-router-dom'
 import { useMutation } from '@apollo/client'
 import { LOGIN } from '../graphql/mutations'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
+// Only same-site paths: blocks open redirects like `//evil.com` or `/\evil.com`.
+export function safeRedirect(value: string | null): string {
+  if (!value || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return '/'
+  return value
+}
+
 const LoginPage: React.FC = () => {
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const history = useHistory()
+  const location = useLocation()
 
   const [loginMutation, { loading: isLoading }] = useMutation(LOGIN, {
     onCompleted: (data) => {
       localStorage.setItem('auth_token', data.login.token)
-      history.push('/')
+      history.push(safeRedirect(new URLSearchParams(location.search).get('redirect')))
     },
     onError: (error) => {
       setError(error.message || 'An error occurred. Please try again.')
@@ -46,8 +53,10 @@ const LoginPage: React.FC = () => {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Login</label>
+              <label htmlFor="login" className="text-sm font-medium text-gray-700">Login</label>
               <Input
+                id="login"
+                autoComplete="username"
                 type="text"
                 placeholder="Enter your login"
                 value={login}
@@ -59,8 +68,10 @@ const LoginPage: React.FC = () => {
             </div>
             
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Password</label>
+              <label htmlFor="password" className="text-sm font-medium text-gray-700">Password</label>
               <Input
+                id="password"
+                autoComplete="current-password"
                 type="password"
                 placeholder="Enter your password"
                 value={password}

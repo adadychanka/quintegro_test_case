@@ -45,6 +45,35 @@ src/
 - **GET** `/health` - Health check
 - **GET** `/api-docs` - Swagger API documentation
 
+### Checkout (GraphQL, `POST /graphql`)
+
+The cart is the user's order in status `created` (one per user, created empty on first access).
+All money values in new types are integer cents (USD).
+
+| Operation | Type | Purpose |
+|---|---|---|
+| `cart` | query | The caller's cart; created empty when missing |
+| `updateItemAmount(orderId, productId, amount)` | mutation | Amount 1–10 for an item in the cart |
+| `deleteProductFromOrder(orderId, productId)` | mutation | Remove an item; an empty cart is valid |
+| `checkoutQuote(promoCode, shippingAddress)` | query | Price preview: subtotal, discount, tax, total. Stores nothing |
+| `addressSuggestions(query)` | query | Address autocomplete (3+ characters, 30 requests/min per user) |
+| `validateAddress(address)` | query | Verdict `verified`, `corrected`, `undeliverable` or `unavailable` |
+| `checkout(input)` | mutation | Places the order: address, tax and payment in one idempotent call |
+| `submitOrder`, `orderSum` | deprecated | `submitOrder` returns `USE_CHECKOUT`; `orderSum` ignores client prices |
+
+`checkout` is idempotent: send the same `idempotencyKey` when retrying the same attempt. A retry
+after success returns the same order; it never creates a second order or a second payment.
+
+Errors carry a code in `errors[].extensions.code`: `UNAUTHENTICATED`, `ORDER_NOT_FOUND`,
+`ORDER_NOT_EDITABLE`, `CART_EMPTY`, `ADDRESS_INVALID` (with `fieldErrors`), `PROMO_INVALID`,
+`PROMO_EXPIRED`, `PRICE_CHANGED` (with the new `pricing`), `PAYMENT_DECLINED` (with `declineCode`),
+`PAYMENT_ERROR`, `CHECKOUT_IN_PROGRESS`, `IDEMPOTENCY_KEY_REUSED`, `USE_CHECKOUT`, `RATE_LIMITED`,
+`VALIDATION_ERROR`.
+
+Providers sit behind interfaces in `src/providers/` and are chosen by env (only `mock` exists today):
+`ADDRESS_PROVIDER`, `TAX_PROVIDER`, `PAYMENT_PROVIDER`. The mock payment provider decides by test card:
+`4242…4242` succeeds, `…0002` declined, `…9995` insufficient funds, `…0119` processing error.
+
 ## Data Models
 
 ### UserRecord
@@ -95,6 +124,12 @@ The application comes with pre-populated data:
 
 ## Development
 
+Run the tests:
+
+```bash
+npm test
+```
+
 For development with auto-reload:
 
 ```bash
@@ -111,6 +146,8 @@ npm run watch
 
 - `PORT` - Server port (default: 3000)
 - `JWT_SECRET` - JWT signing secret (default: development secret)
+- `FAULT_INJECTION` - `on` (default) adds a 1.5 s delay to every request and returns 500 on every 5th one; `off` disables both. `/health`, static files, Swagger and the `AddressSuggestions` GraphQL operation are always exempt
+- `ADDRESS_PROVIDER`, `TAX_PROVIDER`, `PAYMENT_PROVIDER` - provider implementations (default and only option: `mock`)
 
 ## API Usage Examples
 

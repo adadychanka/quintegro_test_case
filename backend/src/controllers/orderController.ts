@@ -1,6 +1,19 @@
 import { Request, Response } from 'express';
 import { OrderService } from '../services/orderService';
 import { AuthService } from '../services/authService';
+import { AppError, isAppError } from '../domain/errors';
+
+const HTTP_STATUS: Partial<Record<AppError['code'], number>> = {
+  ORDER_NOT_FOUND: 404,
+  ORDER_NOT_EDITABLE: 409,
+  CHECKOUT_IN_PROGRESS: 409,
+  USE_CHECKOUT: 409,
+  VALIDATION_ERROR: 400,
+};
+
+function sendAppError(res: Response, e: AppError) {
+  return res.status(HTTP_STATUS[e.code] ?? 400).json({ error: e.code });
+}
 
 interface ProductItem {
   id: string;
@@ -9,7 +22,7 @@ interface ProductItem {
 }
 
 interface OrderSumRequest {
-  products: ProductItem[];
+  products?: ProductItem[]; // ignored: prices come from stored order lines
   promo?: string;
 }
 
@@ -73,34 +86,21 @@ export class OrderController {
     }
   }
 
+  // Deprecated: client-supplied prices are ignored; the sum uses stored order lines.
   async calculateOrderSum(req: Request, res: Response) {
     try {
       const userId = this.extractUserIdFromToken(req);
-      
+
       if (!userId) {
         return res.status(403).json({ error: 'Invalid or missing authentication token' });
       }
 
       const { orderId } = req.params;
-      const { products, promo } = req.body as OrderSumRequest;
-
-      if (!products || !Array.isArray(products)) {
-        return res.status(400).json({ error: 'Products array is required' });
-      }
-
-      // Validate products structure
-      for (const product of products) {
-        if (!product.id || typeof product.amount !== 'number' || typeof product.price !== 'number') {
-          return res.status(400).json({ error: 'Invalid product structure. Each product must have id, amount, and price' });
-        }
-        if (product.amount < 0 || product.price < 0) {
-          return res.status(400).json({ error: 'Amount and price must be non-negative' });
-        }
-      }
-
-      const sum = this.orderService.calculateOrderSum(products, promo);
+      const { promo } = (req.body ?? {}) as OrderSumRequest;
+      const sum = this.orderService.calculateOrderSum(orderId, userId, promo);
       return res.status(200).json(sum);
     } catch (error) {
+      if (isAppError(error)) return sendAppError(res, error);
       console.error('Calculate order sum error:', error);
       return res.status(500).json({ error: 'Internal server error' });
     }
@@ -121,42 +121,20 @@ export class OrderController {
       }
 
       const updatedOrder = await this.orderService.deleteProductFromOrder(orderId, productId, userId);
-
-      if (!updatedOrder) {
-        return res.status(404).json({ error: 'Order not found or access denied' });
-      }
-
       return res.status(200).json(updatedOrder);
     } catch (error) {
+      if (isAppError(error)) return sendAppError(res, error);
       console.error('Delete product from order error:', error);
       return res.status(500).json({ error: 'Internal server error' });
     }
   }
 
+  // Deprecated: orders are placed through the GraphQL `checkout` mutation.
   async submitOrder(req: Request, res: Response) {
-    try {
-      const userId = this.extractUserIdFromToken(req);
-      
-      if (!userId) {
-        return res.status(403).json({ error: 'Invalid or missing authentication token' });
-      }
-
-      const { orderId } = req.params;
-
-      if (!orderId) {
-        return res.status(400).json({ error: 'Order ID is required' });
-      }
-
-      const success = await this.orderService.submitOrder(orderId, userId);
-
-      if (!success) {
-        return res.status(404).json({ error: 'Order not found or access denied' });
-      }
-
-      return res.status(200).send();
-    } catch (error) {
-      console.error('Submit order error:', error);
-      return res.status(500).json({ error: 'Internal server error' });
+    const userId = this.extractUserIdFromToken(req);
+    if (!userId) {
+      return res.status(403).json({ error: 'Invalid or missing authentication token' });
     }
+    return res.status(409).json({ error: 'USE_CHECKOUT' });
   }
 }
