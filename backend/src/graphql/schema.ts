@@ -29,6 +29,43 @@ export const typeDefs = gql`
     subtotalCents: Int!
     products: [OrderItem!]!
     promo: Promo
+    shippingAddress: Address
+    billingAddress: Address
+    addressVerification: AddressVerification
+    pricing: Pricing
+    paymentMethod: PaymentMethodSummary
+    checkedOutAt: Float
+  }
+
+  enum AddressVerification {
+    verified
+    corrected
+    unverified
+    user_override
+  }
+
+  type PaymentMethodSummary {
+    brand: String!
+    last4: String!
+  }
+
+  enum AddressChoice {
+    suggested
+    entered
+  }
+
+  input CheckoutInput {
+    "UUID for one checkout attempt; reused on retries of the same attempt."
+    idempotencyKey: ID!
+    orderId: ID!
+    shippingAddress: AddressInput!
+    addressChoice: AddressChoice!
+    billingSameAsShipping: Boolean!
+    billingAddress: AddressInput
+    "Opaque token from the payment provider's frontend component. Never card data."
+    paymentToken: String!
+    promoCode: String
+    expectedTotalCents: Int!
   }
 
   enum OrderStatus {
@@ -128,5 +165,7 @@ export const typeDefs = gql`
     submitOrder(orderId: ID!): Boolean! @deprecated(reason: "Use checkout. Always returns USE_CHECKOUT.")
     deleteProductFromOrder(orderId: ID!, productId: ID!): Order!
     updateItemAmount(orderId: ID!, productId: ID!, amount: Int!): Order!
+    "Places the order: address, tax and payment in one idempotent call."
+    checkout(input: CheckoutInput!): Order!
   }
 `;

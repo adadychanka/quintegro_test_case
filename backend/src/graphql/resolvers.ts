@@ -2,9 +2,10 @@ import { Container } from '../container';
 import { AppError } from '../domain/errors';
 import { requireUser, resolver } from './errors';
 import { AddressInput, validateAddressInput } from '../domain/address';
+import { CheckoutInput } from '../services/checkoutService';
 
 export const createResolvers = (container: Container) => {
-  const { orders: orderService, auth: authService, promos: promoService, pricing, address } = container.services;
+  const { orders: orderService, auth: authService, promos: promoService, pricing, address, checkout } = container.services;
   const { orders: orderRepository } = container.repositories;
 
   return {
@@ -85,6 +86,11 @@ export const createResolvers = (container: Container) => {
       deleteProductFromOrder: resolver(async ({ orderId, productId }: { orderId: string; productId: string }, ctx) => {
         const userId = requireUser(ctx);
         return orderService.deleteProductFromOrder(orderId, productId, userId);
+      }),
+
+      checkout: resolver(async ({ input }: { input: CheckoutInput }, ctx) => {
+        const userId = requireUser(ctx);
+        return checkout.checkout(userId, input);
       }),
 
       updateItemAmount: resolver(

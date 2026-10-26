@@ -127,6 +127,12 @@ export class OrderService {
       products,
     };
     if (order.promo) dto.promo = order.promo;
+    if (order.shippingAddress) dto.shippingAddress = order.shippingAddress;
+    if (order.billingAddress) dto.billingAddress = order.billingAddress;
+    if (order.addressVerification) dto.addressVerification = order.addressVerification;
+    if (order.pricing) dto.pricing = order.pricing;
+    if (order.paymentMethod) dto.paymentMethod = order.paymentMethod;
+    if (order.checkedOutAt) dto.checkedOutAt = order.checkedOutAt;
     return dto;
   }
 }

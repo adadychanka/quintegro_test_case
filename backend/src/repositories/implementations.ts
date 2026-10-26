@@ -1,5 +1,5 @@
-import { UserRecord, AuthRecord, OrderRecord, ProductRecord, PromoEntity } from '../types/entities';
-import { IUserRepository, IAuthRepository, IOrderRepository, IProductRepository, IPromoRepository } from './interfaces';
+import { UserRecord, AuthRecord, OrderRecord, ProductRecord, PromoEntity, PaymentRecord } from '../types/entities';
+import { IUserRepository, IAuthRepository, IOrderRepository, IProductRepository, IPromoRepository, IPaymentRepository } from './interfaces';
 
 export class InMemoryUserRepository implements IUserRepository {
   private users: UserRecord[] = [
@@ -182,5 +182,28 @@ export class InMemoryPromoRepository implements IPromoRepository {
 
   findAll(): PromoEntity[] {
     return [...this.promos];
+  }
+}
+
+export class InMemoryPaymentRepository implements IPaymentRepository {
+  private payments: PaymentRecord[] = [];
+
+  create(payment: PaymentRecord): void {
+    this.payments.push(payment);
+  }
+
+  update(payment: PaymentRecord): void {
+    const index = this.payments.findIndex(p => p.id === payment.id);
+    if (index !== -1) {
+      this.payments[index] = payment;
+    }
+  }
+
+  findByOrderId(orderId: string): PaymentRecord[] {
+    return this.payments.filter(p => p.orderId === orderId);
+  }
+
+  reset(): void {
+    this.payments = [];
   }
 }

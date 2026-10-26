@@ -50,7 +50,7 @@ export class App {
   }
 
   private initializeRoutes(): void {
-    const { services, repositories } = this.container;
+    const { services } = this.container;
 
     const authController = new AuthController(services.auth);
     const orderController = new OrderController(services.orders, services.auth);
@@ -59,7 +59,7 @@ export class App {
     this.app.use('/api', createAuthRoutes(authController));
     this.app.use('/api/order', createOrderRoutes(orderController));
     this.app.use('/api/promo', createPromoRoutes(promoController));
-    this.app.use('/reset/orders', createResetRoutes([repositories.orders]));
+    this.app.use('/reset/orders', createResetRoutes(this.container.reset));
 
     // Health check endpoint
     this.app.get('/health', (req, res) => {
