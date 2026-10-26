@@ -8,7 +8,7 @@ import { AddressCheck, AddressService } from './addressService';
 import { IdempotencyStore, StoredOutcome } from './checkout/IdempotencyStore';
 import { OrderLockRegistry } from './checkout/OrderLockRegistry';
 import { OrderService } from './orderService';
-import { PricingService } from './pricingService';
+import { Pricing, PricingService } from './pricingService';
 import { withTimeout } from './withTimeout';
 
 export interface CheckoutInput {
@@ -24,6 +24,14 @@ export interface CheckoutInput {
 }
 
 export const PAYMENT_TIMEOUT_MS = 15_000;
+
+// The provider did not answer in time but may still charge. The attempt stays open
+// (key in progress, order locked) until `settled` finishes it with the late result.
+class PendingPayment extends Error {
+  constructor(readonly settled: Promise<OrderDTO>) {
+    super('Payment result pending');
+  }
+}
 
 // Final business errors are replayed for the same key; retryable ones are not stored.
 const STORED_ERRORS = new Set<ErrorCode>([
@@ -69,6 +77,16 @@ function verification(check: AddressCheck, choice: CheckoutInput['addressChoice'
   }
 }
 
+interface Placement {
+  userId: string;
+  order: OrderRecord;
+  payment: PaymentRecord;
+  shipping: Address;
+  billingAddress: Address;
+  addressVerification: AddressVerification;
+  quote: Pricing;
+}
+
 export interface CheckoutDeps {
   orders: IOrderRepository;
   payments: IPaymentRepository;
@@ -106,6 +124,7 @@ export class CheckoutService {
     }
 
     let lockedOrderId: string | undefined;
+    let handedOff = false;
     try {
       const order = this.deps.orderService.getOwnedOrder(input.orderId, userId);
       if (order.status !== 'created') {
@@ -121,16 +140,36 @@ export class CheckoutService {
       this.log(input, 'ok');
       return dto;
     } catch (e) {
-      if (isAppError(e) && STORED_ERRORS.has(e.code)) {
-        idempotency.complete(userId, input.idempotencyKey, { ok: false, code: e.code, message: e.message, details: e.details });
-      } else {
-        idempotency.abandon(userId, input.idempotencyKey);
+      if (e instanceof PendingPayment && lockedOrderId) {
+        handedOff = true;
+        const orderId = lockedOrderId;
+        e.settled
+          .then(
+            (dto) => {
+              idempotency.complete(userId, input.idempotencyKey, { ok: true, orderId: dto.orderId });
+              this.log(input, 'ok (late)');
+            },
+            (late) => this.recordFailure(userId, input, late)
+          )
+          .finally(() => this.deps.locks.release(orderId));
+        this.log(input, 'PAYMENT_PENDING');
+        throw new AppError('PAYMENT_ERROR', 'Payment could not be processed.');
       }
-      this.log(input, isAppError(e) ? e.code : 'INTERNAL');
+      this.recordFailure(userId, input, e);
       throw e;
     } finally {
-      if (lockedOrderId) this.deps.locks.release(lockedOrderId);
+      if (lockedOrderId && !handedOff) this.deps.locks.release(lockedOrderId);
     }
+  }
+
+  private recordFailure(userId: string, input: CheckoutInput, e: unknown): void {
+    const { idempotency } = this.deps;
+    if (isAppError(e) && STORED_ERRORS.has(e.code)) {
+      idempotency.complete(userId, input.idempotencyKey, { ok: false, code: e.code, message: e.message, details: e.details });
+    } else {
+      idempotency.abandon(userId, input.idempotencyKey);
+    }
+    this.log(input, isAppError(e) ? e.code : 'INTERNAL');
   }
 
   private async place(userId: string, order: OrderRecord, input: CheckoutInput): Promise<OrderDTO> {
@@ -175,25 +214,34 @@ export class CheckoutService {
       createdAt: now(),
     };
 
+    const authorizing: Promise<AuthorizeResult> = paymentProvider
+      .authorize({
+        amountCents: quote.totalCents,
+        currency: 'USD',
+        paymentToken: input.paymentToken,
+        orderId: order.orderId,
+        billingAddress,
+        idempotencyKey: `${userId}:${input.idempotencyKey}`,
+        capture: true,
+      })
+      .catch((): AuthorizeResult => ({ status: 'error' }));
+
+    const placement: Placement = { userId, order, payment, shipping, billingAddress, addressVerification, quote };
     let result: AuthorizeResult;
     try {
-      result = await withTimeout(
-        paymentProvider.authorize({
-          amountCents: quote.totalCents,
-          currency: 'USD',
-          paymentToken: input.paymentToken,
-          orderId: order.orderId,
-          billingAddress,
-          idempotencyKey: `${userId}:${input.idempotencyKey}`,
-          capture: true,
-        }),
-        this.deps.paymentTimeoutMs ?? PAYMENT_TIMEOUT_MS
-      );
+      result = await withTimeout(authorizing, this.deps.paymentTimeoutMs ?? PAYMENT_TIMEOUT_MS);
     } catch {
-      result = { status: 'error' };
+      // Timed out: the provider may still charge. Finish this attempt when it answers.
+      throw new PendingPayment(authorizing.then((late) => this.finalize(placement, late)));
     }
+    return this.finalize(placement, result);
+  }
 
-    payment.status = result.status;
+  // Records the payment result and, on success, saves the order snapshot.
+  private async finalize(p: Placement, result: AuthorizeResult): Promise<OrderDTO> {
+    const { paymentProvider } = this.deps;
+    const now = this.deps.now ?? Date.now;
+    const payment = { ...p.payment, status: result.status };
     if (result.providerPaymentId) payment.providerPaymentId = result.providerPaymentId;
     if (result.declineCode) payment.declineCode = result.declineCode;
     this.deps.payments.create(payment);
@@ -205,14 +253,14 @@ export class CheckoutService {
       throw new AppError('PAYMENT_ERROR', 'Payment could not be processed.');
     }
 
-    const promo = quote.promoCode ? this.deps.promos.findById(quote.promoCode) : undefined;
+    const promo = p.quote.promoCode ? this.deps.promos.findById(p.quote.promoCode) : undefined;
     const placed: OrderRecord = {
-      ...order,
+      ...p.order,
       status: 'submited',
-      shippingAddress: shipping,
-      billingAddress,
-      addressVerification,
-      pricing: quote,
+      shippingAddress: p.shipping,
+      billingAddress: p.billingAddress,
+      addressVerification: p.addressVerification,
+      pricing: p.quote,
       paymentId: payment.id,
       checkedOutAt: now(),
     };

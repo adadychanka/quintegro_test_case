@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { caAddress, checkoutInput, containerWith, deferred } from '../helpers/checkout';
 import { AuthorizeResult } from '../../src/providers/payment/PaymentProvider';
 import { MockPaymentProvider } from '../../src/providers/payment/MockPaymentProvider';
+import { CheckoutService } from '../../src/services/checkoutService';
 
 async function errorOf(p: Promise<unknown>): Promise<any> {
   try {
@@ -205,3 +206,61 @@ describe('CheckoutService', () => {
     expect((await errorOf(c.services.checkout.checkout('user-2', checkoutInput()))).code).toBe('ORDER_NOT_FOUND');
   });
 });
+
+describe('CheckoutService payment timeout (late provider result)', () => {
+  function slowCheckout(late: AuthorizeResult, delayMs = 80) {
+    const c = containerWith()
+    vi.spyOn(c.providers.payment, 'authorize').mockImplementation(
+      () => new Promise((r) => setTimeout(() => r(late), delayMs))
+    )
+    const service = new CheckoutService({
+      orders: c.repositories.orders,
+      payments: c.repositories.payments,
+      promos: c.repositories.promos,
+      orderService: c.services.orders,
+      pricing: c.services.pricing,
+      address: c.services.address,
+      paymentProvider: c.providers.payment,
+      idempotency: c.services.idempotency,
+      locks: c.services.locks,
+      paymentTimeoutMs: 20,
+    })
+    return { c, service }
+  }
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+  const captured: AuthorizeResult = { status: 'captured', providerPaymentId: 'late-1', paymentMethod: { brand: 'visa', last4: '4242' } }
+
+  it('keeps the cart locked until the provider answers, then completes the same attempt', async () => {
+    const { c, service } = slowCheckout(captured)
+    expect((await errorOf(service.checkout('user-1', checkoutInput()))).code).toBe('PAYMENT_ERROR')
+
+    // While the provider call is still running: no edits, no second attempt.
+    expect((await errorOf(c.services.orders.updateItemAmount('order-2', 'product-2', 2, 'user-1'))).code).toBe('CHECKOUT_IN_PROGRESS')
+    expect((await errorOf(service.checkout('user-1', checkoutInput()))).code).toBe('CHECKOUT_IN_PROGRESS')
+    expect((await errorOf(service.checkout('user-1', checkoutInput({ idempotencyKey: 'other' })))).code).toBe('CHECKOUT_IN_PROGRESS')
+
+    await wait(120)
+    const order = await service.checkout('user-1', checkoutInput())
+    expect(order.status).toBe('submited')
+    const payments = c.repositories.payments.findByOrderId('order-2')
+    expect(payments.filter((p) => p.status === 'captured')).toHaveLength(1)
+    expect(c.services.locks.isLocked('order-2')).toBe(false)
+  })
+
+  it('a late decline is replayed for the same key and unlocks the cart', async () => {
+    const { c, service } = slowCheckout({ status: 'declined', declineCode: 'card_declined' })
+    expect((await errorOf(service.checkout('user-1', checkoutInput()))).code).toBe('PAYMENT_ERROR')
+    await wait(120)
+    expect((await errorOf(service.checkout('user-1', checkoutInput()))).code).toBe('PAYMENT_DECLINED')
+    expect(c.repositories.orders.findById('order-2')!.status).toBe('created')
+    expect(c.services.locks.isLocked('order-2')).toBe(false)
+  })
+
+  it('a new key after a late capture cannot charge again', async () => {
+    const { c, service } = slowCheckout(captured)
+    await errorOf(service.checkout('user-1', checkoutInput()))
+    await wait(120)
+    expect((await errorOf(service.checkout('user-1', checkoutInput({ idempotencyKey: 'other' })))).code).toBe('ORDER_NOT_EDITABLE')
+    expect(c.repositories.payments.findByOrderId('order-2')).toHaveLength(1)
+  })
+})
